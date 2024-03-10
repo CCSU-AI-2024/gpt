@@ -13,3 +13,6 @@ def encode(string: str) -> list:
 
 def decode(ints: list) -> str:
     return ''.join([int_to_str[i] for i in ints])
+
+encoded_data: t.Tensor = t.tensor(encode(shakespeare_data), dtype = t.long)
+
