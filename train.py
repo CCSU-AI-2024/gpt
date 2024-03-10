@@ -1,9 +1,9 @@
-import torch
+import torch as t
 
 with open('training_data.txt', 'r', encoding='utf-8') as f:
-    training_data: str = f.read()
+    shakespeare_data: str = f.read()
 
-unique_chars: list = sorted(list(set(training_data)))
+unique_chars: list = sorted(list(set(shakespeare_data)))
 
 str_to_int: dict = { char:i for i, char in enumerate(unique_chars) }
 int_to_str: dict = { i:char for i, char in enumerate(unique_chars) }
