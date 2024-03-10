@@ -1,9 +1,9 @@
-import torch
+import torch as t
 
 with open('training_data.txt', 'r', encoding='utf-8') as f:
-    training_data: str = f.read()
+    shakespeare_data: str = f.read()
 
-unique_chars: list = sorted(list(set(training_data)))
+unique_chars: list = sorted(list(set(shakespeare_data)))
 
 str_to_int: dict = { char:i for i, char in enumerate(unique_chars) }
 int_to_str: dict = { i:char for i, char in enumerate(unique_chars) }
@@ -13,3 +13,9 @@ def encode(string: str) -> list:
 
 def decode(ints: list) -> str:
     return ''.join([int_to_str[i] for i in ints])
+
+encoded_data: t.Tensor = t.tensor(encode(shakespeare_data), dtype = t.long)
+
+train_size: int = int(0.9 * len(shakespeare_data))
+training_data: t.Tensor = encoded_data[:train_size]
+validation_data: t.Tensor = encoded_data[train_size:]
