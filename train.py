@@ -16,3 +16,6 @@ def decode(ints: list) -> str:
 
 encoded_data: t.Tensor = t.tensor(encode(shakespeare_data), dtype = t.long)
 
+train_size: int = int(0.9 * len(shakespeare_data))
+training_data: t.Tensor = encoded_data[:train_size]
+validation_data: t.Tensor = encoded_data[train_size:]
