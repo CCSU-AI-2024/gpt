@@ -1,4 +1,6 @@
 import torch as t
+import torch.nn as nn
+from torch.nn import functional as F
 
 with open('training_data.txt', 'r', encoding='utf-8') as f:
     shakespeare_data: str = f.read()
@@ -26,11 +28,10 @@ class Head(nn.Module):
     def __init__(self, head_size):
       super().__init__()
       self.key = nn.Linear(n_embd, head_size, bias=False)
-      slef.query = nn.Linear(n_embd, head_size, bias=False)
-      self.value = Linear(n_embd, head_size, bias=False)
-      self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
-    
-    self.dropout = nn.Dropout(dropout) # dropout randomly drops, or zeroes, some elements during training
+      self.query = nn.Linear(n_embd, head_size, bias=False)
+      self.value = nn.Linear(n_embd, head_size, bias=False)
+      self.register_buffer('tril', t.tril(t.ones(block_size, block_size)))
+      self.dropout = t.Dropout(dropout) # dropout randomly drops, or zeroes, some elements during training
     
     def forward(self, x):
       B,T,C = x.shape
@@ -39,9 +40,23 @@ class Head(nn.Module):
       
       wei = q @ k.transpose(-2,-1) * k.shape[-1]**-0.5 # (B, T, hs) @ (B, hs, T) -> (B, T, T)
       wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
-      wei = F.softmax(wei, dim=-1) # (B, T, T)
+      wei = F.softmax(wei, dim=-1) # (B, T, T), softmax is normalization operation.Rescales input tensors, so output tensors lie in range [0,1] and sum to 1
       wei = self.dropout(wei)
       
       v = self.value(x) # (B,T,hs)
       out = wei @v # (B, T, T) @ (B, T, hs) -> (B, T, hs)
       return out
+      
+class MultiHeadAttention(nn.Module):
+    #multiple self attention heads running in parallel
+    def __init__(self, num_heads, head_size):
+        super().__init__()
+        self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+        self.proj = nn.Linear(head_size * num_heads, n_embd)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        out = t.cat([h(x) for h in self.heads], dim=-1) #concatenates all of the outputes
+        out = self.dropout(self.proj(out))
+        return out
+    
