@@ -2,6 +2,14 @@ import torch as t
 import torch.nn as nn
 from torch.nn import functional as F
 
+#hyperparameters
+block_size = 8 #max context length for predictions
+n_embd = 32 #number of embedding dimensions
+n_head = 2 #the number of heads we'd like
+dropout = .2 #used as parameter for dropout. represents probability of an element to be zeroed
+
+#---
+
 with open('training_data.txt', 'r', encoding='utf-8') as f:
     shakespeare_data: str = f.read()
 
@@ -56,8 +64,8 @@ class MultiHeadAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        out = t.cat([h(x) for h in self.heads], dim=-1) #concatenates all of the outputs
-        out = self.dropout(self.proj(out))
+        out = t.cat([h(x) for h in self.heads], dim=-1) #concatenates all of the outputs. 
+        out = self.dropout(self.proj(out)) #applies projection
         return out
         
 class FeedFoward(nn.Module):
@@ -75,3 +83,19 @@ class FeedFoward(nn.Module):
     def forward(self, x):
         return self.net(x)
     
+class Block(nn.Module):
+    #intersperses communication and computation 
+
+    def __init__(self, n_embd, n_head):
+        # n_embd: embedding dimension, n_head: the number of heads we'd like
+        super().__init__()
+        head_size = n_embd // n_head
+        self.sa = MultiHeadAttention(n_head, head_size) #communication
+        self.ffwd = FeedFoward(n_embd) #computation
+        self.ln1 = nn.LayerNorm(n_embd)
+        self.ln2 = nn.LayerNorm(n_embd)
+
+    def forward(self, x):
+        x = x + self.sa(self.ln1(x)) #communication
+        x = x + self.ffwd(self.ln2(x)) #computation
+        return x
