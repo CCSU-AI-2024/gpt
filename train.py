@@ -32,28 +32,27 @@ validation_data: t.Tensor = encoded_data[train_size:]
 
 
 class Head(nn.Module):
-
     def __init__(self, head_size):
-      super().__init__()
-      self.key = nn.Linear(n_embd, head_size, bias=False)
-      self.query = nn.Linear(n_embd, head_size, bias=False)
-      self.value = nn.Linear(n_embd, head_size, bias=False)
-      self.register_buffer('tril', t.tril(t.ones(block_size, block_size)))
-      self.dropout = t.Dropout(dropout) # dropout randomly drops, or zeroes, some elements during training
-    
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer('tril', t.tril(t.ones(block_size, block_size)))
+        self.dropout = t.Dropout(dropout) # dropout randomly drops, or zeroes, some elements during training
+        
     def forward(self, x):
-      B,T,C = x.shape
-      k = self.key(x) # (B,T,hs)
-      q = self.query(x) # (B,T,hs)
-      
-      wei = q @ k.transpose(-2,-1) * k.shape[-1]**-0.5 # (B, T, hs) @ (B, hs, T) -> (B, T, T)
-      wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
-      wei = F.softmax(wei, dim=-1) # (B, T, T), softmax is normalization operation.Rescales input tensors, so output tensors lie in range [0,1] and sum to 1
-      wei = self.dropout(wei)
-      
-      v = self.value(x) # (B,T,hs)
-      out = wei @v # (B, T, T) @ (B, T, hs) -> (B, T, hs)
-      return out
+        B,T,C = x.shape
+        k = self.key(x) # (B,T,hs)
+        q = self.query(x) # (B,T,hs)
+        
+        wei = q @ k.transpose(-2,-1) * k.shape[-1]**-0.5 # (B, T, hs) @ (B, hs, T) -> (B, T, T)
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
+        wei = F.softmax(wei, dim=-1) # (B, T, T), softmax is normalization operation.Rescales input tensors, so output tensors lie in range [0,1] and sum to 1
+        wei = self.dropout(wei)
+        
+        v = self.value(x) # (B,T,hs)
+        out = wei @v # (B, T, T) @ (B, T, hs) -> (B, T, hs)
+        return out
       
 class MultiHeadAttention(nn.Module):
     #multiple self attention heads running in parallel
@@ -85,7 +84,6 @@ class FeedFoward(nn.Module):
     
 class Block(nn.Module):
     #intersperses communication and computation 
-
     def __init__(self, n_embd, n_head):
         # n_embd: embedding dimension, n_head: the number of heads we'd like
         super().__init__()
