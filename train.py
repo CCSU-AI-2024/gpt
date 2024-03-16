@@ -61,7 +61,8 @@ class MultiHeadAttention(nn.Module):
         return out
         
 class FeedFoward(nn.Module):
-
+    #single layer linear, followed by a relu non-linearity
+    #if self attention is communication, this is thinking upon it individually
     def __init__(self, n_embd):
         super().__init__()
         self.net = nn.Sequential(
