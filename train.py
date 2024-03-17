@@ -3,12 +3,14 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 #hyperparameters
-block_size = 8 #max context length for predictions
-n_embd = 32 #number of embedding dimensions
-n_head = 2 #the number of heads we'd like
-dropout = .2 #used as parameter for dropout. represents probability of an element to be zeroed
-
+batch_size = 4 # amount of sequences to go thru parallel processing
+block_size = 8 # max context length for predictions
+n_embd = 32 # number of embedding dimensions
+n_head = 2 # the number of heads we'd like
+dropout = .2 # used as parameter for dropout. represents probability of an element to be zeroed
 #---
+
+t.manual_seed(1337) # setting manual seed ensures rng is reproducible
 
 with open('training_data.txt', 'r', encoding='utf-8') as f:
     shakespeare_data: str = f.read()
@@ -25,11 +27,16 @@ def decode(ints: list) -> str:
     return ''.join([int_to_str[i] for i in ints])
 
 encoded_data: t.Tensor = t.tensor(encode(shakespeare_data), dtype = t.long)
-
 train_size: int = int(0.9 * len(shakespeare_data))
-training_data: t.Tensor = encoded_data[:train_size]
-validation_data: t.Tensor = encoded_data[train_size:]
+training: t.Tensor = encoded_data[:train_size] # 90% of data goes to training
+validation: t.Tensor = encoded_data[train_size:] # 10% of data goes to validation
 
+def get_batch(data: t.Tensor) -> tuple[t.Tensor, t.Tensor]:
+    random_start: t.Tensor = t.randint(len(data) - block_size, (batch_size, 1)) # ensures batches contain different segments of dataset
+    input: t.Tensor = t.stack([data[i:i + block_size] for i in random_start])
+    target: t.Tensor = t.stack([data[i + 1:i + block_size + 1] for i in random_start])
+
+    return (input, target)
 
 class Head(nn.Module):
     def __init__(self, head_size):
