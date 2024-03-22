@@ -12,6 +12,7 @@ eval_interval = 300 # how often are we going to evaluate our loss
 eval_iters = 200 # how many batch iterations we will take the average loss of
 n_embd = 32 # number of embedding dimensions
 dropout = 0.2
+device = 'cuda' if t.cuda.is_available() else 'cpu'
 #---
 
 t.manual_seed(1337) # setting manual seed ensures rng is reproducible
@@ -62,13 +63,18 @@ class BigramLanguageModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
-            # every int in our input will refer to this embedding table, and get the corresponding row
+            # every int in our input will refer to this embedding table ^, and get the corresponding row
+        self.position_embedding_table = nn.Embedding(block_size, n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, input, targets=None):
+        B, T = input.shape
+
         token_embds = self.token_embedding_table(input) # essentially the predictions for the next character in the sequence
         # Batch x Time x Channel (characters) tensor
-        logits = self.lm_head(token_embds)
+        position_embds = self.position_embedding_table(t.arange(T, device=device))
+        embds_sum = token_embds + position_embds
+        logits = self.lm_head(embds_sum)
 
         if targets is None:
             loss = None
@@ -82,14 +88,16 @@ class BigramLanguageModel(nn.Module):
 
     def generate(self, input, max_new_tokens): # takes the input (context) and expand it using the prediction
         for _ in range(max_new_tokens):
-            logits, loss = self(input) # refers to forward function
+            input_cond = input[:, -block_size:]
+            logits, loss = self(input_cond) # refers to forward function
             logits = logits[:, -1, :]
             probs = F.softmax(logits, dim=-1)
             next_inp = t.multinomial(probs, num_samples=1)
             input = t.cat((input, next_inp), dim=1) # whatever is generated gets concatenated with previous input
         return input
 
-m = BigramLanguageModel()
+model = BigramLanguageModel()
+m = model.to(device)
 
 # training the model to not be random
 optimizer = t.optim.AdamW(m.parameters(), lr = learning_rate) # try experimenting with the learning rate
