@@ -5,9 +5,9 @@ from torch.nn import functional as F
 #hyperparameters
 batch_size = 32 # amount of sequences to go thru parallel processing
 block_size = 8 # max context length for predictions
-learning_rate = 1e-2
+learning_rate = 1e-3
 max_new_tokens = 500  # how many characters do we generate
-max_iters = 3000 # how many times are we going to "learn" and decrease our loss
+max_iters = 5000 # how many times are we going to "learn" and decrease our loss
 eval_interval = 300 # how often are we going to evaluate our loss
 eval_iters = 200 # how many batch iterations we will take the average loss of
 n_embd = 32 # number of embedding dimensions
@@ -126,12 +126,14 @@ class Block(nn.Module):
         return x
 
 #Simplest possible neural network, the Bigram Language Model
-class BigramLanguageModel(nn.Module):
+class GPTLanguageModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
             # every int in our input will refer to this embedding table ^, and get the corresponding row
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.self_attention_head: Head = Head(n_embd)
+        self.feed_forward = FeedFoward(n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, input, targets=None):
@@ -141,6 +143,8 @@ class BigramLanguageModel(nn.Module):
         # Batch x Time x Channel (characters) tensor
         position_embds = self.position_embedding_table(t.arange(T, device=device))
         embds_sum = token_embds + position_embds
+        embds_sum = self.self_attention_head(embds_sum)
+        embds_sum = self.feed_forward(embds_sum)
         logits = self.lm_head(embds_sum)
 
         if targets is None:
@@ -163,7 +167,7 @@ class BigramLanguageModel(nn.Module):
             input = t.cat((input, next_inp), dim=1) # whatever is generated gets concatenated with previous input
         return input
 
-model = BigramLanguageModel()
+model = GPTLanguageModel()
 m = model.to(device)
 
 # training the model to not be random
