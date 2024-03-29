@@ -3,14 +3,14 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 #hyperparameters
-batch_size = 64 # amount of sequences to go thru parallel processing
-block_size = 256 # max context length for predictions
-learning_rate = 3e-4
+batch_size = 32 # amount of sequences to go thru parallel processing
+block_size = 8 # max context length for predictions
+learning_rate = 1e-3
 max_new_tokens = 500  # how many characters do we generate
 max_iters = 5000 # how many times are we going to "learn" and decrease our loss
 eval_interval = 300 # how often are we going to evaluate our loss
 eval_iters = 200 # how many batch iterations we will take the average loss of
-n_embd = 384 # number of embedding dimensions
+n_embd = 32 # number of embedding dimensions
 dropout = 0.2
 device = 'cuda' if t.cuda.is_available() else 'cpu'
 n_layer = 6
@@ -134,6 +134,8 @@ class GPTLanguageModel(nn.Module):
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
             # every int in our input will refer to this embedding table ^, and get the corresponding row
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.blocks = nn.Sequential(*[Block(n_embd, n_head=n_head) for _ in range(n_layer)])
+        self.final_layer_norm = nn.LayerNorm(n_embd)
         self.self_attention_head: Head = Head(n_embd)
         self.feed_forward = FeedFoward(n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)
