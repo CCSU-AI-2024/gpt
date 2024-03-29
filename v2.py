@@ -3,16 +3,18 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 #hyperparameters
-batch_size = 32 # amount of sequences to go thru parallel processing
-block_size = 8 # max context length for predictions
-learning_rate = 1e-2
+batch_size = 64 # amount of sequences to go thru parallel processing
+block_size = 256 # max context length for predictions
+learning_rate = 3e-4
 max_new_tokens = 500  # how many characters do we generate
-max_iters = 3000 # how many times are we going to "learn" and decrease our loss
+max_iters = 5000 # how many times are we going to "learn" and decrease our loss
 eval_interval = 300 # how often are we going to evaluate our loss
 eval_iters = 200 # how many batch iterations we will take the average loss of
-n_embd = 32 # number of embedding dimensions
+n_embd = 384 # number of embedding dimensions
 dropout = 0.2
 device = 'cuda' if t.cuda.is_available() else 'cpu'
+n_layer = 6
+n_head = 6
 #---
 
 t.manual_seed(1337) # setting manual seed ensures rng is reproducible
@@ -58,66 +60,6 @@ def estimate_loss():
     m.train()
     return out
 
-#Simplest possible neural network, the Bigram Language Model
-class BigramLanguageModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
-            # every int in our input will refer to this embedding table ^, and get the corresponding row
-        self.position_embedding_table = nn.Embedding(block_size, n_embd)
-        self.lm_head = nn.Linear(n_embd, vocab_size)
-
-    def forward(self, input, targets=None):
-        B, T = input.shape
-
-        token_embds = self.token_embedding_table(input) # essentially the predictions for the next character in the sequence
-        # Batch x Time x Channel (characters) tensor
-        position_embds = self.position_embedding_table(t.arange(T, device=device))
-        embds_sum = token_embds + position_embds
-        logits = self.lm_head(embds_sum)
-
-        if targets is None:
-            loss = None
-        else:
-            # reshaping logits and targets for cross_entropy
-            B,T,C = logits.shape
-            logits = logits.view(B*T, C) # makes logits 2d instead of 3d
-            targets = targets.view(B*T) # makes targets 1d instead of 2d
-            loss = F.cross_entropy(logits, targets) # measures the quality of the logits with respect to the targets
-        return logits, loss
-
-    def generate(self, input, max_new_tokens): # takes the input (context) and expand it using the prediction
-        for _ in range(max_new_tokens):
-            input_cond = input[:, -block_size:]
-            logits, loss = self(input_cond) # refers to forward function
-            logits = logits[:, -1, :]
-            probs = F.softmax(logits, dim=-1)
-            next_inp = t.multinomial(probs, num_samples=1)
-            input = t.cat((input, next_inp), dim=1) # whatever is generated gets concatenated with previous input
-        return input
-
-model = BigramLanguageModel()
-m = model.to(device)
-
-# training the model to not be random
-optimizer = t.optim.AdamW(m.parameters(), lr = learning_rate) # try experimenting with the learning rate
-
-for steps in range(max_iters):
-    # every so often, evaluate the loss on the training and validation sets
-    if steps % eval_interval == 0:
-        losses = estimate_loss()
-        print(f"step {steps}: train loss {losses[training]:.4f}, val loss {losses[validation]:.4f}")
-    input, target = get_batch(training)  # sample a new batch of data
-
-    logits, loss = m(input, target)  # evaluate the loss
-    optimizer.zero_grad(set_to_none=True)  # zero out from previous step
-    loss.backward()  # getting gradients of all the parameters
-    optimizer.step()  # using those gradients to update our parameters
-
-# generate from the BigramLanguageModel
-context = t.zeros((1,1), dtype = t.long)  # start generating from a single 0
-print(decode(m.generate(context, max_new_tokens)[0].tolist()))
-
 class Head(nn.Module):
     def __init__(self, head_size):
         super().__init__()
@@ -125,7 +67,7 @@ class Head(nn.Module):
         self.query = nn.Linear(n_embd, head_size, bias=False)
         self.value = nn.Linear(n_embd, head_size, bias=False)
         self.register_buffer('tril', t.tril(t.ones(block_size, block_size)))
-        self.dropout = t.Dropout(dropout) # dropout randomly drops, or zeroes, some elements during training
+        self.dropout = nn.Dropout(dropout) # dropout randomly drops, or zeroes, some elements during training
         
     def forward(self, x):
         B,T,C = x.shape
@@ -184,3 +126,69 @@ class Block(nn.Module):
         x = x + self.sa(self.ln1(x)) #communication
         x = x + self.ffwd(self.ln2(x)) #computation
         return x
+
+#Simplest possible neural network, the Bigram Language Model
+class GPTLanguageModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+            # every int in our input will refer to this embedding table ^, and get the corresponding row
+        self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.blocks = nn.Sequential(*[Block(n_embd, n_head=n_head) for _ in range(n_layer)])
+        self.final_layer_norm = nn.LayerNorm(n_embd)
+        self.self_attention_head: Head = Head(n_embd)
+        self.feed_forward = FeedFoward(n_embd)
+        self.lm_head = nn.Linear(n_embd, vocab_size)
+
+    def forward(self, input, targets=None):
+        B, T = input.shape
+
+        token_embds = self.token_embedding_table(input) # essentially the predictions for the next character in the sequence
+        # Batch x Time x Channel (characters) tensor
+        position_embds = self.position_embedding_table(t.arange(T, device=device))
+        embds_sum = token_embds + position_embds
+        embds_sum = self.self_attention_head(embds_sum)
+        embds_sum = self.feed_forward(embds_sum)
+        logits = self.lm_head(embds_sum)
+
+        if targets is None:
+            loss = None
+        else:
+            # reshaping logits and targets for cross_entropy
+            B,T,C = logits.shape
+            logits = logits.view(B*T, C) # makes logits 2d instead of 3d
+            targets = targets.view(B*T) # makes targets 1d instead of 2d
+            loss = F.cross_entropy(logits, targets) # measures the quality of the logits with respect to the targets
+        return logits, loss
+
+    def generate(self, input, max_new_tokens): # takes the input (context) and expand it using the prediction
+        for _ in range(max_new_tokens):
+            input_cond = input[:, -block_size:]
+            logits, loss = self(input_cond) # refers to forward function
+            logits = logits[:, -1, :]
+            probs = F.softmax(logits, dim=-1)
+            next_inp = t.multinomial(probs, num_samples=1)
+            input = t.cat((input, next_inp), dim=1) # whatever is generated gets concatenated with previous input
+        return input
+
+model = GPTLanguageModel()
+m = model.to(device)
+
+# training the model to not be random
+optimizer = t.optim.AdamW(m.parameters(), lr = learning_rate) # try experimenting with the learning rate
+
+for steps in range(max_iters):
+    # every so often, evaluate the loss on the training and validation sets
+    if steps % eval_interval == 0:
+        losses = estimate_loss()
+        print(f"step {steps}: train loss {losses[training]:.4f}, val loss {losses[validation]:.4f}")
+    input, target = get_batch(training)  # sample a new batch of data
+
+    logits, loss = m(input, target)  # evaluate the loss
+    optimizer.zero_grad(set_to_none=True)  # zero out from previous step
+    loss.backward()  # getting gradients of all the parameters
+    optimizer.step()  # using those gradients to update our parameters
+
+# generate from the BigramLanguageModel
+context = t.zeros((1,1), dtype = t.long)  # start generating from a single 0
+print(decode(m.generate(context, max_new_tokens)[0].tolist()))
