@@ -41,7 +41,7 @@ def get_batch(data: t.Tensor) -> tuple[t.Tensor, t.Tensor]:
     input: t.Tensor = t.stack([data[i:i + block_size] for i in random_start])
     target: t.Tensor = t.stack([data[i + 1:i + block_size + 1] for i in random_start])
 
-    return (input, target)
+    return (input.to(device), target.to(device))
 # input is a 32x8 tensor, each row is a random chunk of the training set
 # target is also 32x8 tensor, containing the targets given the context of our input
 # transformer will look up the correct char to predict using this in the other model
@@ -136,8 +136,6 @@ class GPTLanguageModel(nn.Module):
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
         self.blocks = nn.Sequential(*[Block(n_embd, n_head=n_head) for _ in range(n_layer)])
         self.final_layer_norm = nn.LayerNorm(n_embd)
-        self.self_attention_head: Head = Head(n_embd)
-        self.feed_forward = FeedFoward(n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, input, targets=None):
@@ -147,8 +145,8 @@ class GPTLanguageModel(nn.Module):
         # Batch x Time x Channel (characters) tensor
         position_embds = self.position_embedding_table(t.arange(T, device=device))
         embds_sum = token_embds + position_embds
-        embds_sum = self.self_attention_head(embds_sum)
-        embds_sum = self.feed_forward(embds_sum)
+        embds_sum = self.blocks(embds_sum)
+        embds_sum = self.final_layer_norm(embds_sum)
         logits = self.lm_head(embds_sum)
 
         if targets is None:
@@ -179,7 +177,7 @@ optimizer = t.optim.AdamW(m.parameters(), lr = learning_rate) # try experimentin
 
 for steps in range(max_iters):
     # every so often, evaluate the loss on the training and validation sets
-    if steps % eval_interval == 0:
+    if steps % eval_interval == 0 or iter == max_iters - 1:
         losses = estimate_loss()
         print(f"step {steps}: train loss {losses[training]:.4f}, val loss {losses[validation]:.4f}")
     input, target = get_batch(training)  # sample a new batch of data
@@ -190,5 +188,5 @@ for steps in range(max_iters):
     optimizer.step()  # using those gradients to update our parameters
 
 # generate from the BigramLanguageModel
-context = t.zeros((1,1), dtype = t.long)  # start generating from a single 0
-print(decode(m.generate(context, max_new_tokens)[0].tolist()))
+context = t.zeros((1,1), dtype = t.long, device=device)  # start generating from a single 0
+print(decode(m.generate(context, max_new_tokens=2000)[0].tolist()))
