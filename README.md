@@ -5,7 +5,7 @@
 - [x] Bigram language model
 - [x] Loss generation
 - [x] Train model
-- [ ] Self attention
-- [ ] Multi-headed self-attention
+- [x] Self attention
+- [x] Multi-headed self-attention
 ### References
 <https://youtu.be/kCc8FmEb1nY?si=e2Q5YaBgO9386NHy>
