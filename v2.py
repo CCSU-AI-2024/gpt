@@ -189,4 +189,4 @@ for steps in range(max_iters):
 
 # generate from the BigramLanguageModel
 context = t.zeros((1,1), dtype = t.long, device=device)  # start generating from a single 0
-print(decode(m.generate(context, max_new_tokens=2000)[0].tolist()))
+print(decode(m.generate(context, max_new_tokens)[0].tolist()))
